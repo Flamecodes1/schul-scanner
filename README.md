@@ -21,7 +21,7 @@ ordentlich in deiner eigenen, privaten Ablage auf GitHub ab. Am PC siehst du all
 ## Wie es aufgebaut ist
 
 ```
-iPhone (Web-App)  ──►  privates Repo „schul-ablage“  ◄──  GitHub Action holt Stundenplan aus WebUntis
+iPhone (Web-App)  ──►  privates Repo „schul-ablage“  ◄──  GitHub Action (in diesem Repo) holt Stundenplan aus WebUntis
        ▲                         │
        └──── PC (Browser) ◄──────┘
 ```
@@ -30,7 +30,7 @@ iPhone (Web-App)  ──►  privates Repo „schul-ablage“  ◄──  GitHub
 |---|---|---|
 | App | dieses Repo (GitHub Pages) | HTML/CSS/JS, keine Daten |
 | Ablage | privates Repo `schul-ablage` | PDFs, Texte, `index.json`, `config.json`, Stundenplan |
-| Untis-Sync | `.github/workflows/untis-sync.yml` in der Ablage | läuft mehrmals täglich, Zugangsdaten als Secrets |
+| Untis-Sync | `.github/workflows/untis-sync.yml` in diesem Repo | läuft mehrmals täglich (kostenlos, weil öffentliches Repo), schreibt nur in die private Ablage |
 
 Vorlage für die Ablage: [`ablage-vorlage/`](ablage-vorlage/)
 
@@ -42,9 +42,10 @@ Vorlage für die Ablage: [`ablage-vorlage/`](ablage-vorlage/)
    - *Permissions:* **Contents** = Read and write, **Actions** = Read and write
 3. **App auf dem iPhone öffnen** (GitHub-Pages-Adresse) → in Safari **Teilen → Zum Home-Bildschirm**.
 4. In der App unter **Einstellungen** Repo-Name und Token eintragen.
-5. **Untis:** im Ablage-Repo unter *Settings → Secrets and variables → Actions* die Secrets
-   `UNTIS_URL`, `UNTIS_USER`, `UNTIS_PASSWORD` anlegen (Details in [`ablage-vorlage/README.md`](ablage-vorlage/README.md)).
-   Dann in der App „Jetzt holen“ tippen.
+5. **Untis:** in **diesem** Repo unter *Settings → Secrets and variables → Actions* die Secrets
+   `UNTIS_URL`, `UNTIS_USER`, `UNTIS_PASSWORD` und `ABLAGE_TOKEN` anlegen
+   (Details in [`ablage-vorlage/README.md`](ablage-vorlage/README.md)). Dann in der App „Jetzt holen“ tippen.
+   Die Logs der Actions sind öffentlich, enthalten aber keine persönlichen Daten.
 
 ## Entwickeln
 

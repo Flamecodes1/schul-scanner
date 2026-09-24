@@ -1,5 +1,6 @@
-// Holt deinen Stundenplan aus WebUntis und speichert ihn als untis/timetable.json.
-// Läuft automatisch auf GitHub Actions (siehe untis-sync.yml). Zugangsdaten kommen aus den Secrets.
+// Holt deinen Stundenplan aus WebUntis und speichert ihn als untis/timetable.json
+// (im aktuellen Ordner = ausgecheckte Ablage). Läuft auf GitHub Actions, siehe untis-sync.yml.
+// Die Logs sind öffentlich sichtbar – deshalb werden hier nie Namen, Schule oder Stunden ausgegeben.
 //
 // Secrets (Settings → Secrets and variables → Actions):
 //   UNTIS_URL       Adresse von WebUntis, z. B. https://xyz.webuntis.com/WebUntis/?school=abc
@@ -115,9 +116,8 @@ async function findSchool(query) {
   const data = await res.json();
   const schools = data?.result?.schools || [];
   if (schools.length === 1) return { server: schools[0].server, school: schools[0].loginName };
-  if (!schools.length) throw new Error(`Keine Schule gefunden für „${query}“`);
-  const list = schools.slice(0, 8).map((s) => `  - ${s.displayName} (${s.address}) → loginName: ${s.loginName}`).join('\n');
-  throw new Error(`Mehrere Schulen gefunden für „${query}“. Trag den passenden loginName als UNTIS_SCHOOL ein:\n${list}`);
+  if (!schools.length) throw new Error('Keine Schule zu UNTIS_SCHOOL gefunden. Nimm besser UNTIS_URL (Adresse aus dem Browser mit „?school=…“).');
+  throw new Error(`${schools.length} Schulen passen zu UNTIS_SCHOOL. Nimm besser UNTIS_URL (Adresse aus dem Browser mit „?school=…“).`);
 }
 
 async function connect(env) {
@@ -147,7 +147,7 @@ async function connect(env) {
 async function main() {
   const env = process.env;
   const { client, school } = await connect(env);
-  console.log(`Melde mich bei ${school} an …`);
+  console.log('Melde mich bei WebUntis an …');
   try {
     await client.login();
   } catch (e) {
@@ -168,7 +168,7 @@ async function main() {
     try {
       raw.push(...await client.getOwnTimetableForRange(start, end));
     } catch (e) {
-      if (!/no result|-7004|nicht gefunden/i.test(e.message)) console.warn(`Woche ab ${isoDate(start)}: ${e.message}`);
+      if (!/no result|-7004|nicht gefunden/i.test(e.message)) console.warn(`Eine Woche konnte nicht geladen werden (${e.message})`);
     }
   }
   const lessons = convertLessons(raw);
@@ -235,7 +235,7 @@ async function main() {
   data.updated = new Date().toISOString();
   await fs.mkdir(path.dirname(OUT), { recursive: true });
   await fs.writeFile(OUT, JSON.stringify(data, null, 1) + '\n');
-  console.log(`Gespeichert: ${OUT}`);
+  console.log('Stundenplan gespeichert ✓');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

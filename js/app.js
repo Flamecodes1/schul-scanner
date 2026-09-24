@@ -4,7 +4,7 @@ import { $, $$, esc, uid, isoDate, fmtDay, fmtLong, fmtMonth, fmtAgo, daysUntil,
 import {
   state, init, onChange, connected, updateSettings, refresh, syncOutbox, subjects, subjectById,
   allDocs, docById, addDoc, updateDoc, deleteDoc, thumbUrl, pdfBlob, search, saveSubjects,
-  triggerUntisSync, untisRunStatus,
+  triggerUntisSync, untisRunStatus, untisRepo,
 } from './library.js';
 import { GitHub } from './github.js';
 import { lessonAt, classify, suggestTitle, cleanTitle } from './classify.js';
@@ -436,11 +436,13 @@ function renderGhSection() {
   };
 }
 
+const untisTokenUrl = () => `https://github.com/settings/personal-access-tokens/new?name=Untis-Sync&description=Stundenplan+in+die+Ablage+schreiben&expires_in=365&contents=write`;
+
 function renderUntisSection() {
   const el = $('#untis-section');
   if (!el) return;
   const tt = state.timetable;
-  const repo = state.settings.repo;
+  const repo = untisRepo();
   const info = tt
     ? `<div class="list">
         <div class="row"><span class="dot" style="background:var(--ok)"></span><div class="grow"><div class="title">${esc(tt.school || 'Stundenplan geladen')}</div>
@@ -449,11 +451,12 @@ function renderUntisSection() {
       </div>`
     : `<div class="note">
         <b>Stundenplan automatisch aus WebUntis</b>
-        Ein kleiner Helfer auf GitHub holt deinen Stundenplan (inkl. Vertretungen, Hausaufgaben und Arbeiten) mehrmals am Tag. Dafür trägst du deine Untis-Zugangsdaten einmal als geheime „Secrets“ ein – sie landen nie in der App:
+        Ein kleiner Helfer auf GitHub holt deinen Stundenplan (inkl. Vertretungen, Hausaufgaben und Arbeiten) mehrmals am Tag – kostenlos über dein App-Repo, gespeichert wird aber nur in deiner privaten Ablage. Dafür trägst du einmal geheime „Secrets“ ein – sie landen nie in der App:
         <ol>
-          <li>${repo ? `<a href="https://github.com/${esc(repo)}/settings/secrets/actions/new" target="_blank" rel="noopener">Secrets im Ablage-Repo öffnen</a>` : 'Im Ablage-Repo: Settings → Secrets and variables → Actions'}</li>
+          <li>${repo ? `<a href="https://github.com/${esc(repo)}/settings/secrets/actions/new" target="_blank" rel="noopener">Secrets im App-Repo <i>${esc(repo.split('/')[1])}</i> öffnen</a>` : 'Im App-Repo: Settings → Secrets and variables → Actions'}</li>
           <li><code>UNTIS_URL</code> – die Adresse, wenn du WebUntis im Browser öffnest</li>
           <li><code>UNTIS_USER</code> und <code>UNTIS_PASSWORD</code> – deine Untis-Anmeldung</li>
+          <li><code>ABLAGE_TOKEN</code> – ein <a href="${untisTokenUrl()}" target="_blank" rel="noopener">Token</a>, der in deine Ablage schreiben darf (nur <i>schul-ablage</i>, <i>Contents</i>: Read and write)</li>
           <li>Dann hier auf „Jetzt holen“ tippen.</li>
         </ol>
         <button class="btn small primary" type="button" id="untis-sync" style="margin-top:10px" ${connected() ? '' : 'disabled'}>Jetzt holen</button>
@@ -467,7 +470,10 @@ function renderUntisSection() {
       await triggerUntisSync();
       toast('Stundenplan wird geholt – dauert etwa eine Minute');
       pollUntis();
-    } catch (err) { toast(err.message, 5000); }
+    } catch (err) {
+      toast(err.message, 7000);
+      if (err.noPermission) { await refresh(); }
+    }
   };
 }
 

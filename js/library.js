@@ -380,14 +380,40 @@ export function search(query) {
 
 export const UNTIS_WORKFLOW = 'untis-sync.yml';
 
+/**
+ * Der Untis-Abruf läuft im (öffentlichen) App-Repo, weil GitHub Actions dort kostenlos sind.
+ * Auf GitHub Pages ergibt sich das Repo aus der Adresse: benutzer.github.io/schul-scanner
+ */
+export function untisRepo() {
+  const host = location.hostname.match(/^([^.]+)\.github\.io$/i);
+  const first = location.pathname.split('/').filter(Boolean)[0];
+  if (host && first) return `${host[1]}/${first}`;
+  return state.settings.untisRepo || (state.settings.repo ? `${state.settings.repo.split('/')[0]}/schul-scanner` : '');
+}
+
+function untisGh() {
+  const { token } = state.settings;
+  const repo = untisRepo();
+  return token && repo ? new GitHub({ token, repo }) : null;
+}
+
 export async function triggerUntisSync() {
-  const g = gh();
+  const g = untisGh();
   if (!g) throw new Error('Nicht mit GitHub verbunden');
-  await g.dispatch(UNTIS_WORKFLOW);
+  try {
+    await g.dispatch(UNTIS_WORKFLOW);
+  } catch (e) {
+    if (e.status === 403 || e.status === 404) {
+      const err = new Error('Dein Token darf den Abruf nicht selbst starten. Kein Problem: Er läuft automatisch mehrmals am Tag – oder starte ihn auf GitHub unter „Actions“.');
+      err.noPermission = true;
+      throw err;
+    }
+    throw e;
+  }
 }
 
 export async function untisRunStatus() {
-  const g = gh();
+  const g = untisGh();
   if (!g) return null;
   try { return await g.latestRun(UNTIS_WORKFLOW); } catch { return null; }
 }

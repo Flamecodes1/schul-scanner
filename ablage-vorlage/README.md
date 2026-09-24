@@ -22,17 +22,20 @@ config.json                         ← deine Fächer
 
 ## Stundenplan aus Untis
 
-Der Workflow `.github/workflows/untis-sync.yml` holt mehrmals am Tag deinen Stundenplan. Dafür unter
-**Settings → Secrets and variables → Actions → New repository secret** eintragen:
+Der Stundenplan wird von einem Workflow im **App-Repo** (`schul-scanner`) geholt – dort sind GitHub Actions
+kostenlos – und direkt hierher nach `untis/timetable.json` geschrieben. Hier im privaten Repo läuft nichts.
+
+Die Secrets trägst du deshalb im App-Repo ein: **schul-scanner → Settings → Secrets and variables → Actions**
 
 | Secret | Inhalt |
 |---|---|
 | `UNTIS_URL` | Die Adresse, wenn du WebUntis im Browser öffnest (z. B. `https://xyz.webuntis.com/WebUntis/?school=abc`) |
 | `UNTIS_USER` | Dein Untis-Benutzername |
 | `UNTIS_PASSWORD` | Dein Untis-Passwort |
+| `ABLAGE_TOKEN` | Ein Fine-grained Token nur für dieses Repo mit *Contents: Read and write* |
 
-Falls in der Adresse kein `?school=…` steht, zusätzlich `UNTIS_SCHOOL` mit dem Namen deiner Schule anlegen.
+Falls in der Adresse kein `?school=…` steht, zusätzlich `UNTIS_SCHOOL` anlegen.
 Meldest du dich bei Untis über IServ/Microsoft an, nimm statt Benutzer/Passwort das Secret `UNTIS_QR`
 (Inhalt des QR-Codes aus WebUntis → Profil → Freigaben).
 
-Die Secrets sind verschlüsselt und nur für den Workflow sichtbar – nicht für die App und nicht im Code.
+Secrets sind verschlüsselt: Niemand kann sie lesen – auch nicht in einem öffentlichen Repo.
