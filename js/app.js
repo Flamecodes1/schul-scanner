@@ -1,12 +1,12 @@
 // Oberfläche: Bibliothek, Fach, Blatt, Einstellungen – und der Scan-Ablauf.
 
-import { $, $$, esc, uid, isoDate, fmtDay, fmtLong, fmtMonth, fmtAgo, daysUntil, toast, textOn, icons } from './util.js';
+import { $, $$, esc, uid, isoDate, minutesOf, fmtDay, fmtLong, fmtMonth, fmtAgo, daysUntil, toast, textOn, icons } from './util.js';
 import {
-  state, init, onChange, connected, updateSettings, refresh, syncOutbox, subjects, subjectById,
-  allDocs, docById, addDoc, updateDoc, deleteDoc, thumbUrl, pdfBlob, search, saveSubjects,
+  state, init, onChange, connected, updateSettings, refresh, syncOutbox, subjects, subjectById, subjectForLesson,
+  allDocs, docById, addDoc, updateDoc, deleteDoc, thumbUrl, pdfBlob, search, saveSubjects, untisCourses, assignUntis,
 } from './library.js';
 import { GitHub } from './github.js';
-import { lessonAt, classify, suggestTitle, cleanTitle } from './classify.js';
+import { lessonAt, lessonsOn, classify, suggestTitle, cleanTitle } from './classify.js';
 import { loadPhoto, detectQuad, defaultQuad, warp, rotate, rotateQuad, enhance, forOcr, thumbnail, makeCanvas } from './scanner.js';
 import { recognize, warmUp } from './ocr.js';
 import { buildPdf, renderPdf, inspectPdf, toJpegBlob } from './pdf.js';
@@ -27,6 +27,7 @@ function route() {
   if (parts[0] === 'fach' && parts[1]) return renderSubject(parts[1]);
   if (parts[0] === 'blatt' && parts[1]) return renderDoc(parts[1]);
   if (parts[0] === 'einstellungen' && parts[1] === 'fach') return renderSubjectEdit(parts[2]);
+  if (parts[0] === 'einstellungen' && parts[1] === 'kurse') return renderCourses();
   if (parts[0] === 'einstellungen') return renderSettings();
   return renderLibrary();
 }
@@ -93,7 +94,7 @@ function bindSyncPill() {
   });
 }
 
-const lessonName = (l) => subjectById(l.subject)?.name || l.subjectName || l.subject;
+const lessonName = (l) => subjectForLesson(l.subject)?.name || l.subjectName || l.subject;
 
 // ============================================================
 // Bibliothek
@@ -163,49 +164,92 @@ function renderLibraryContent() {
   hydrateThumbs(el);
 }
 
+const weekdayFmt = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'short' });
+
+/** Doppelstunden zu einem Eintrag zusammenfassen (auch wenn parallel eine Vertretung läuft) */
+function mergeLessons(lessons) {
+  const merged = [];
+  [...lessons].sort((a, b) => a.start.localeCompare(b.start)).forEach((l) => {
+    const prev = merged.find((m) => m.subject === l.subject && m.status === l.status
+      && minutesOf(l.start) >= minutesOf(m.end) && minutesOf(l.start) - minutesOf(m.end) <= 20);
+    if (prev) prev.end = l.end;
+    else merged.push({ ...l });
+  });
+  // Gleiche Uhrzeit: ausgefallene Stunde zuerst, dann die Vertretung
+  const order = { cancelled: 0, changed: 1, normal: 2 };
+  return merged.sort((a, b) => a.start.localeCompare(b.start) || order[a.status] - order[b.status]);
+}
+
+/**
+ * Die Karte oben in der Bibliothek:
+ *  1. Tagesplan – heute, oder nach Schulschluss der nächste Schultag
+ *  2. Hausaufgaben (nächste 7 Tage)
+ *  3. Arbeiten (nächste 3 Wochen)
+ */
 function todayCard() {
   const tt = state.timetable;
   if (!tt) return '';
   const now = new Date();
-  const { now: cur, next, past, all } = lessonAt(tt, now);
-  const detail = (l) => [`${l.start}–${l.end}`, l.teachers?.join(', '), l.rooms?.join(', ')].filter(Boolean).join(' · ');
-  let main = '';
-  const lesson = cur || next;
-  if (lesson) {
-    const s = subjectById(lesson.subject);
-    const label = cur ? 'Jetzt' : past.length ? 'Als Nächstes' : 'Heute zuerst';
-    const flag = lesson.status === 'changed' ? ' <span class="small" style="color:var(--warn)">Vertretung/Änderung</span>' : '';
-    main = `<div class="now">${badge(s || { name: lesson.subject })}<div><div class="label">${label}</div><div class="what">${esc(lessonName(lesson))}${flag}</div><div class="small muted">${esc(detail(lesson))}</div></div></div>`;
-  } else if (all.length) {
-    main = `<div class="now"><div><div class="label">Heute</div><div class="what">Schule ist aus 🎉</div></div></div>`;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const { now: cur, all } = lessonAt(tt, now);
+  const active = (l) => l.status !== 'cancelled';
+  const schoolLeftToday = all.some((l) => active(l) && minutesOf(l.end) + 5 >= nowMin);
+
+  let title = 'Heute', dayLessons = all, isToday = true, intro = '';
+  if (!schoolLeftToday) {
+    dayLessons = [];
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(now); d.setDate(d.getDate() + i);
+      const { lessons } = lessonsOn(tt, d);
+      if (lessons.length) {
+        dayLessons = lessons; isToday = false;
+        title = i === 1 ? 'Morgen' : weekdayFmt.format(d);
+        if (all.some(active)) intro = 'Für heute ist Schule aus.';
+        break;
+      }
+    }
   }
 
-  // Heutige Stunden als kleine Chips (Doppelstunden zusammengefasst)
-  const sorted = [...all].sort((a, b) => a.start.localeCompare(b.start));
-  const merged = [];
-  sorted.forEach((l) => {
-    const last = merged[merged.length - 1];
-    if (last && last.subject === l.subject && last.status === l.status) last.end = l.end;
-    else merged.push({ ...l });
-  });
-  const chips = merged.length ? `<div class="chips">${merged.map((l) => {
-    const s = subjectById(l.subject);
-    const cancelled = l.status === 'cancelled';
-    return `<span class="chip" style="${cancelled ? 'text-decoration:line-through;opacity:.5' : ''}" title="${esc(detail(l))}"><span class="dot" style="background:${esc(s?.color || '#8d8d86')}"></span>${esc(l.start)} ${esc(lessonName(l))}</span>`;
-  }).join('')}</div>` : '';
+  const rows = mergeLessons(dayLessons).map((l) => {
+    const s = subjectForLesson(l.subject);
+    const isNow = isToday && cur && cur.subject === l.subject && minutesOf(cur.start) >= minutesOf(l.start) && minutesOf(cur.start) < minutesOf(l.end);
+    const done = isToday && !isNow && minutesOf(l.end) < nowMin;
+    const tag = l.status === 'cancelled' ? '<span class="tag cancel">fällt aus</span>'
+      : l.status === 'changed' ? '<span class="tag change">geändert</span>'
+        : isNow ? '<span class="tag now">jetzt</span>' : '';
+    return `<div class="lesson ${l.status === 'cancelled' ? 'cancelled' : ''} ${done ? 'done' : ''} ${isNow ? 'is-now' : ''}">
+      <span class="time">${esc(l.start)}</span>
+      <span class="dot" style="background:${esc(s?.color || '#8d8d86')}"></span>
+      <span class="name">${esc(lessonName(l))}</span>
+      <span class="meta">${esc([l.teachers?.join(', '), l.rooms?.join(', ')].filter(Boolean).join(' · '))}</span>
+      ${tag}
+      ${l.info && l.status !== 'normal' ? `<span class="info">${esc(l.info)}</span>` : ''}
+    </div>`;
+  }).join('');
 
   const today = isoDate();
-  const exams = (tt.exams || []).filter((e) => e.date >= today && daysUntil(e.date) <= 21);
-  const homework = (tt.homework || []).filter((h) => !h.done && h.due >= today && daysUntil(h.due) <= 7);
-  const upcoming = [
-    ...exams.map((e) => ({ date: e.date, text: `📝 ${e.name || 'Arbeit'} ${subjectById(e.subject)?.name || e.subject}` })),
-    ...homework.map((h) => ({ date: h.due, text: `📚 ${subjectById(h.subject)?.name || h.subject}: ${h.text}` })),
-  ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
-  const up = upcoming.length ? `<div class="upcoming">${upcoming.map((u) => `<div><b>${esc(fmtDay(u.date))}</b><span>${esc(u.text)}</span></div>`).join('')}</div>` : '';
+  const homework = (tt.homework || []).filter((h) => !h.done && h.due >= today && daysUntil(h.due) <= 7)
+    .sort((a, b) => a.due.localeCompare(b.due)).slice(0, 4);
+  const exams = (tt.exams || []).filter((e) => e.date >= today && daysUntil(e.date) <= 21)
+    .sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
+  const inDays = (iso) => { const n = daysUntil(iso); return n <= 1 ? fmtDay(iso) : `${fmtDay(iso)} · in ${n} Tagen`; };
+  const subjName = (short) => subjectForLesson(short)?.name || short || '';
 
-  if (!main && !chips && !up) return '';
-  return `<div class="section-title">Heute <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:400">Stundenplan ${esc(fmtAgo(tt.updated))}</span></div>
-    <div class="card today">${main}${chips}${up}</div>`;
+  const hwHtml = homework.length ? `<div class="subhead">Hausaufgaben</div>${homework.map((h) => `
+    <div class="todo"><b>${esc(subjName(h.subject))}</b><span class="when">bis ${esc(fmtDay(h.due))}</span><span class="what">${esc(h.text)}</span></div>`).join('')}` : '';
+  const examHtml = exams.length ? `<div class="subhead">Arbeiten &amp; Tests</div>${exams.map((e) => {
+    const s = subjectForLesson(e.subject);
+    const extra = e.name && e.name !== e.subject && e.name !== s?.name ? e.name : '';
+    return `<div class="todo"><b>${esc(subjName(e.subject))}</b><span class="when">${esc(inDays(e.date))}</span>${extra ? `<span class="what">${esc(extra)}</span>` : ''}</div>`;
+  }).join('')}` : '';
+
+  if (!rows && !hwHtml && !examHtml) return '';
+  return `<div class="section-title">${esc(title)} <span class="small muted" style="text-transform:none;letter-spacing:0;font-weight:400">Stundenplan ${esc(fmtAgo(tt.updated))}</span></div>
+    <div class="card today">
+      ${intro ? `<div class="small muted">${esc(intro)} So sieht ${esc(title === 'Morgen' ? 'morgen' : title)} aus:</div>` : ''}
+      ${rows ? `<div class="lessons">${rows}</div>` : '<div class="muted">Kein Unterricht in den nächsten Tagen.</div>'}
+      ${hwHtml}${examHtml}
+    </div>`;
 }
 
 // ============================================================
@@ -446,6 +490,7 @@ function renderUntisSection() {
     ? `<div class="list">
         <div class="row"><span class="dot" style="background:${stale ? 'var(--warn)' : 'var(--ok)'}"></span><div class="grow"><div class="title">${esc(tt.school || 'Stundenplan geladen')}</div>
         <div class="sub">Stand ${esc(fmtAgo(tt.updated))} · ${tt.subjects?.length || 0} ${tt.subjects?.length === 1 ? 'Fach' : 'Fächer'}</div></div></div>
+        <a class="row" href="#/einstellungen/kurse"><span class="grow" style="color:var(--accent)">Kurse &amp; Lehrer den Fächern zuordnen</span><span class="chev">${icons.chev}</span></a>
         <button class="row" type="button" id="untis-reload"><span class="grow" style="color:var(--accent)">Neu laden</span></button>
       </div>
       <p class="small muted" style="margin:8px 4px 0">${stale
@@ -470,6 +515,46 @@ function renderUntisSection() {
   };
 }
 
+/**
+ * Jeder Untis-Kurs (mit Lehrkraft und Zeiten) lässt sich einem Fach zuordnen.
+ * Beispiel: GESWI (Gesamtwirtschaft, Fr 11:15) gehört zu „Gesamtwirtschaft“, nicht zu „BWL“.
+ */
+function renderCourses() {
+  const draw = () => {
+    const courses = untisCourses();
+    const subs = subjects();
+    const options = (current) => [
+      ...subs.filter((s) => !s.hidden || s.id === current?.id).map((s) => `<option value="${esc(s.id)}" ${s.id === current?.id ? 'selected' : ''}>${esc(s.name)}</option>`),
+      '<option value="neu">➕ Eigenes Fach</option>',
+    ].join('');
+    view.innerHTML = `
+      <button class="back" type="button" onclick="location.hash='#/einstellungen'">${icons.back}Einstellungen</button>
+      <div class="page-head small"><h1>Kurse &amp; Lehrer zuordnen</h1></div>
+      <p class="muted small" style="margin:-6px 4px 14px">So weiß die App, welche Stunde (und welche Lehrkraft) zu welchem Fach gehört. Mehrere Kurse können zum selben Fach gehören, z. B. zwei BWL-Kurse.</p>
+      ${courses.length ? `<div class="list">${courses.map((c) => `
+        <div class="row course">
+          <span class="dot" style="background:${esc(c.subject?.color || '#8d8d86')}"></span>
+          <div class="grow">
+            <div class="title">${esc(c.long || c.short)} <span class="muted small">${esc(c.short)}</span></div>
+            <div class="sub">${esc([c.teacherNames?.length ? c.teacherNames.join(', ') : c.teachers?.join(', '), c.times.join(', ')].filter(Boolean).join(' · ') || '–')}</div>
+          </div>
+          <select class="course-select" data-short="${esc(c.short)}" aria-label="Fach für ${esc(c.long || c.short)}">${options(c.subject)}</select>
+        </div>`).join('')}</div>`
+      : `<div class="card empty">Noch kein Stundenplan da. Richte zuerst den Untis-Abruf auf deinem PC ein.</div>`}
+    `;
+    $$('.course-select').forEach((sel) => sel.onchange = async () => {
+      sel.disabled = true;
+      try {
+        const target = await assignUntis(sel.dataset.short, sel.value);
+        toast(`${sel.dataset.short} gehört jetzt zu ${target.name}`);
+        draw();
+        if (sel.value === 'neu') go(`#/einstellungen/fach/${encodeURIComponent(target.id)}`);
+      } catch (err) { toast(err.message, 4000); sel.disabled = false; }
+    });
+  };
+  draw();
+}
+
 function renderSubjectEdit(id) {
   const all = subjects();
   const isNew = id === 'neu';
@@ -485,7 +570,9 @@ function renderSubjectEdit(id) {
       <label class="field"><span>Eigene Stichwörter (mit Komma getrennt) – helfen beim automatischen Einsortieren</span>
         <textarea class="input" name="keywords" placeholder="z. B. Faust, Goethe, Kurzgeschichte">${esc((s.keywords || []).join(', '))}</textarea></label>
       <label class="row" style="padding:4px 0 14px"><input type="checkbox" name="hidden" ${s.hidden ? 'checked' : ''} style="width:22px;height:22px"><span class="grow">Ausblenden (Fach habe ich nicht)</span></label>
-      ${!isNew && (s.untis?.length || s.teachers?.length) ? `<p class="small muted" style="margin:0 4px 14px">Aus Untis: ${esc([(s.untis || []).join(', '), (s.teachers || []).join(', ')].filter(Boolean).join(' · '))}</p>` : ''}
+      ${!isNew && state.timetable ? `<p class="small muted" style="margin:0 4px 14px">${s.untis?.length
+        ? `Untis-Kurse: ${esc(s.untis.join(', '))}${s.teachers?.length ? ` · Lehrkraft: ${esc(s.teachers.join(', '))}` : ''}`
+        : 'Noch kein Untis-Kurs zugeordnet.'} <a href="#/einstellungen/kurse">Zuordnung ändern</a></p>` : ''}
       <div class="btn-row">
         ${!isNew && !used && !s.fromUntis && !s.untis?.length ? `<button class="btn danger" type="button" id="subj-del">${icons.trash}Löschen</button>` : ''}
         <button class="btn primary" type="submit">Speichern</button>
@@ -523,7 +610,6 @@ function renderSubjectEdit(id) {
 // ============================================================
 
 const sheet = $('#scan');
-const isTouch = matchMedia('(pointer: coarse)').matches;
 let scan = null;
 
 function openScan() {
@@ -547,10 +633,7 @@ function pick(input) {
   el.click();
 }
 
-$('#scan-button').addEventListener('click', () => {
-  openScan();
-  if (isTouch) pick('#pick-camera'); // Auf dem Handy direkt die Kamera öffnen
-});
+$('#scan-button').addEventListener('click', () => openScan());
 $('#pick-camera').addEventListener('change', (e) => handleFiles([...e.target.files], 'kamera'));
 $('#pick-photos').addEventListener('change', (e) => handleFiles([...e.target.files], 'fotos'));
 $('#pick-files').addEventListener('change', (e) => handleFiles([...e.target.files], 'datei'));
@@ -930,7 +1013,7 @@ async function saveScan() {
     }
     // Passende Unterrichtsstunde merken (für Lehrer/Uhrzeit in der Ablage)
     const { now, past } = lessonAt(state.timetable, scan.when);
-    const sameSubject = (l) => l && subjectById(l.subject)?.id === scan.subject;
+    const sameSubject = (l) => l && subjectForLesson(l.subject)?.id === scan.subject;
     const lesson = sameSubject(now) ? now : past.find(sameSubject);
     const meta = {
       id: uid(),

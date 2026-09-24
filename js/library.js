@@ -3,7 +3,7 @@
 // Aufbau der Ablage:
 //   index.json                     – Liste aller Blätter (inkl. erkanntem Text für die Suche)
 //   config.json                    – deine Fächer (Namen, Farben, Stichwörter)
-//   untis/timetable.json           – Stundenplan, wird automatisch von GitHub Actions geholt
+//   untis/timetable.json           – Stundenplan, holt dein PC automatisch (pc-sync/)
 //   2026-27/Deutsch/2026-09-24 Gedichtanalyse.pdf
 //   2026-27/Deutsch/2026-09-24 Gedichtanalyse.md   – Text + Infos (z. B. für Obsidian)
 //   .thumbs/<id>.jpg               – kleine Vorschaubilder
@@ -11,7 +11,7 @@
 import { GitHub } from './github.js';
 import { loadSettings, saveSettings, kv, outbox, cache } from './store.js';
 import { KNOWN, knownFor, colorFor, defaultSubjects } from './subjects.js';
-import { safeName, schoolYear } from './util.js';
+import { safeName, schoolYear, uid } from './util.js';
 
 export const state = {
   settings: loadSettings(),
@@ -90,24 +90,26 @@ export function subjects() {
   const list = fromDefaults
     ? defaultSubjects().map((s) => ({ ...s, hidden: untis.length ? true : s.hidden }))
     : saved.map((s) => ({ ...s }));
+  // Erst Fach-IDs, dann Untis-Verknüpfungen (die haben Vorrang, wenn du einen Kurs umgehängt hast)
   const byId = new Map();
-  list.forEach((s) => { byId.set(s.id, s); (s.untis || []).forEach((u) => byId.set(u, s)); });
+  list.forEach((s) => byId.set(s.id, s));
+  list.forEach((s) => (s.untis || []).forEach((u) => byId.set(u, s)));
 
   untis.forEach((u) => {
     let s = byId.get(u.short);
     if (!s) {
       const known = knownFor(u.short, u.long);
-      // Gibt es das Fach schon als Standardfach (z. B. "deutsch")? Dann zusammenführen.
-      const dup = known && list.find((x) => x.id === known.key);
+      // Passendes Standardfach (z. B. "deutsch") übernehmen – aber nur, wenn es noch keinen Untis-Kurs hat.
+      // Zwei verschiedene Untis-Kurse werden nie automatisch zusammengelegt.
+      const dup = known && list.find((x) => x.id === known.key && !x.untis?.length);
       if (dup) {
-        // Erstes Mal mit Untis verknüpft → du hast das Fach also wirklich: einblenden
-        if (fromDefaults || !dup.untis?.length) dup.hidden = false;
-        dup.untis = [...new Set([...(dup.untis || []), u.short])];
+        dup.hidden = false; // du hast das Fach also wirklich
+        dup.untis = [u.short];
         s = dup;
       } else {
         s = {
           id: u.short,
-          name: known?.name || u.long || u.short,
+          name: u.long && u.long.length <= 24 ? u.long : known?.name || u.long || u.short,
           color: u.color || known?.color || colorFor(list.length),
           keywords: [],
           fromUntis: true,
@@ -134,8 +136,62 @@ export function subjects() {
   });
 }
 
+/** Fach eines Blatts (Blätter speichern die Fach-ID) */
 export function subjectById(id) {
-  return subjects().find((s) => s.id === id || s.untis?.includes(id));
+  const list = subjects();
+  return list.find((s) => s.id === id) || list.find((s) => s.untis?.includes(id));
+}
+
+/** Fach einer Unterrichtsstunde (Stunden speichern das Untis-Kürzel, z. B. "GESWI") */
+export function subjectForLesson(short) {
+  const list = subjects();
+  return list.find((s) => s.untis?.includes(short)) || list.find((s) => s.id === short);
+}
+
+/**
+ * Alle Untis-Kurse mit Lehrkräften, Zeiten und dem Fach, zu dem sie gerade gehören.
+ * Zeiten kommen aus dem regulären Wochenplan, z. B. "Fr 11:15–12:50".
+ */
+export function untisCourses() {
+  const tt = state.timetable;
+  if (!tt) return [];
+  const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const pattern = tt.weekPattern || {};
+  return (tt.subjects || []).map((u) => {
+    const times = [];
+    for (const [wd, slots] of Object.entries(pattern)) {
+      const mine = slots.filter((p) => p.subject === u.short).sort((a, b) => a.start.localeCompare(b.start));
+      if (mine.length) times.push(`${days[wd]} ${mine[0].start}–${mine[mine.length - 1].end}`);
+    }
+    return { ...u, times, subject: subjectForLesson(u.short) };
+  });
+}
+
+/** Hängt einen Untis-Kurs an ein anderes Fach (targetId = 'neu' → eigenes neues Fach) */
+export async function assignUntis(short, targetId) {
+  const u = (state.timetable?.subjects || []).find((x) => x.short === short);
+  const list = subjects().map((s) => ({ ...s, untis: (s.untis || []).filter((x) => x !== short) }));
+  let target = targetId === 'neu' ? null : list.find((s) => s.id === targetId);
+  if (!target) {
+    const known = knownFor(short, u?.long);
+    target = {
+      id: `f-${uid()}`,
+      name: u?.long || short,
+      color: u?.color || known?.color || colorFor(list.length),
+      keywords: [],
+      untis: [],
+    };
+    list.push(target);
+  }
+  target.untis.push(short);
+  target.hidden = false;
+  // Aus Untis entstandene Fächer, die jetzt leer sind (kein Kurs, kein Blatt), ausblenden
+  const docs = allDocs();
+  list.forEach((s) => {
+    if (s !== target && s.fromUntis && !s.untis.length && !docs.some((d) => d.subject === s.id)) s.hidden = true;
+  });
+  await saveSubjects(list);
+  return target;
 }
 
 /** Speichert Fächer-Einstellungen (nur die eigenen Felder, nicht die abgeleiteten) */

@@ -189,19 +189,20 @@ function similarityScores(add, text, docs, subjectById) {
  */
 export function classify({ text = '', when = new Date(), subjects, timetable, docs = [] }) {
   const visible = subjects.filter((s) => !s.hidden);
-  // Untis-Kürzel ("D") zeigen auf das jeweilige Fach
-  const subjectById = new Map();
-  subjects.forEach((s) => { subjectById.set(s.id, s); (s.untis || []).forEach((u) => subjectById.set(u, s)); });
+  // Blätter kennen die Fach-ID, Stunden das Untis-Kürzel ("GESWI") – Untis-Verknüpfungen haben dort Vorrang
+  const subjectById = new Map(subjects.map((s) => [s.id, s]));
+  const subjectByLesson = new Map(subjectById);
+  subjects.forEach((s) => (s.untis || []).forEach((u) => subjectByLesson.set(u, s)));
   const scores = new Map();
-  const add = (id, pts, reason) => {
-    const s = subjectById.get(id);
+  const add = (id, pts, reason, fromLesson = false) => {
+    const s = (fromLesson ? subjectByLesson : subjectById).get(id);
     if (!s || s.hidden) return;
     const e = scores.get(s.id) || { id: s.id, score: 0, reasons: [] };
     e.score += pts;
     if (reason) e.reasons.push({ pts, text: reason });
     scores.set(s.id, e);
   };
-  timetableScores(add, timetable, when, subjectById);
+  timetableScores((id, pts, reason) => add(id, pts, reason, true), timetable, when, subjectByLesson);
   keywordScores(add, text, visible);
   languageScores(add, text, visible);
   similarityScores(add, text, docs, subjectById);

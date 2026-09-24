@@ -25,8 +25,19 @@ export const KNOWN = [
     words: ['geschichte', 'jahrhundert', 'krieg', 'kaiser', 'könig', 'revolution', 'mittelalter', 'antike', 'weimarer', 'republik', 'nationalsozialismus', 'reich', 'quelle', 'historisch', 'epoche', 'reformation', 'weltkrieg', 'herrschaft'] },
   { key: 'erdkunde', name: 'Erdkunde', color: '#6c9a2b', re: /erdkunde|geograph|geografie|^ek$|^geo$/i,
     words: ['erdkunde', 'geographie', 'geografie', 'klima', 'karte', 'kontinent', 'bevölkerung', 'landwirtschaft', 'vulkan', 'erdbeben', 'atlas', 'globalisierung', 'tourismus', 'relief', 'plattentektonik', 'niederschlag', 'region'] },
-  { key: 'politik', name: 'Politik', color: '#d6409f', re: /politik|sozialkunde|gemeinschaftskunde|powi|wirtschaft|^po$|^sk$|^gk$|^wi$/i,
-    words: ['politik', 'demokratie', 'bundestag', 'wahl', 'wahlen', 'grundgesetz', 'partei', 'parteien', 'regierung', 'gesellschaft', 'bundesrat', 'gewaltenteilung', 'verfassung', 'wirtschaft', 'markt', 'bürger'] },
+  { key: 'politik', name: 'Politik', color: '#d6409f', re: /politik|sozialkunde|gemeinschaftskunde|powi|^po$|^sk$|^gk$/i,
+    words: ['politik', 'demokratie', 'bundestag', 'wahl', 'wahlen', 'grundgesetz', 'partei', 'parteien', 'regierung', 'gesellschaft', 'bundesrat', 'gewaltenteilung', 'verfassung', 'bürger'] },
+  // Wirtschaftsfächer (z. B. an kaufmännischen Schulen) – bewusst getrennt, nicht zusammenlegen!
+  { key: 'bwl', name: 'BWL', color: '#e5a000', re: /betriebswirtschaft|^bwl$|^bw$/i,
+    words: ['betriebswirtschaft', 'unternehmen', 'betrieb', 'kaufvertrag', 'beschaffung', 'absatz', 'marketing', 'produktion', 'rechtsform', 'gmbh', 'personal', 'arbeitsvertrag', 'ausbildungsvertrag', 'lohn', 'gehalt', 'kalkulation', 'lager', 'lieferant', 'kunde', 'handelsregister', 'prokura', 'vollmacht', 'zahlungsverkehr', 'finanzierung', 'investition'] },
+  { key: 'vwl', name: 'Gesamtwirtschaft', color: '#8e8c2f', re: /volkswirtschaft|gesamtwirtschaft|^vwl$|^gw$|^geswi$/i,
+    words: ['volkswirtschaft', 'gesamtwirtschaft', 'markt', 'marktformen', 'angebot', 'nachfrage', 'preisbildung', 'gleichgewichtspreis', 'inflation', 'konjunktur', 'bruttoinlandsprodukt', 'bip', 'geldpolitik', 'ezb', 'arbeitslosigkeit', 'wirtschaftspolitik', 'marktwirtschaft', 'wirtschaftskreislauf', 'außenhandel', 'wirtschaftswachstum', 'wettbewerb', 'kartell', 'sozialversicherung'] },
+  { key: 'rewe', name: 'Rechnungswesen', color: '#2f7d6d', re: /rechnungswesen|steuerung|kontrolle|controlling|^rw$|^rewe$|^st$/i,
+    words: ['rechnungswesen', 'buchung', 'buchungssatz', 'konto', 'konten', 'soll', 'haben', 'bilanz', 'inventur', 'inventar', 'gewinn', 'verlust', 'kosten', 'kostenrechnung', 'abschreibung', 'umsatzsteuer', 'vorsteuer', 'deckungsbeitrag', 'aufwand', 'ertrag', 'controlling'] },
+  { key: 'textv', name: 'Textverarbeitung', color: '#5b7fa6', re: /textverarbeitung|tastschreiben|^tv$|^texv$/i,
+    words: ['textverarbeitung', 'word', 'tastschreiben', 'din', 'geschäftsbrief', 'formatierung', 'tabulator', 'serienbrief', 'anschriftfeld', 'betreff'] },
+  { key: 'uefa', name: 'Übungsfirma', color: '#b0569b', re: /übungsfirma|lernbüro|^üfa$|^uefa$/i,
+    words: ['übungsfirma', 'auftrag', 'rechnung', 'lieferschein', 'bestellung', 'angebot', 'anfrage', 'auftragsbestätigung', 'mahnung', 'kunde', 'lieferant', 'warenwirtschaft'] },
   { key: 'religion', name: 'Religion', color: '#7d66d9', re: /religion|ethik|philosophie|werte|^er$|^kr$|^rk$|^ev$|^re$|^eth?$|^pp$/i,
     words: ['religion', 'ethik', 'gott', 'bibel', 'kirche', 'jesus', 'glaube', 'moral', 'philosophie', 'islam', 'judentum', 'christentum', 'gewissen', 'werte', 'gerechtigkeit'] },
   { key: 'kunst', name: 'Kunst', color: '#e38a00', re: /kunst|^ku$|^bk$/i,
@@ -56,6 +67,9 @@ export function colorFor(index) {
   return EXTRA_COLORS[index % EXTRA_COLORS.length];
 }
 
+// Diese Fächer sind ohne Untis erstmal sichtbar, alle anderen ausgeblendet
+const COMMON = new Set(['deutsch', 'mathe', 'englisch', 'franz', 'bio', 'chemie', 'physik', 'geschichte', 'erdkunde', 'politik', 'religion', 'kunst', 'musik', 'sport']);
+
 /** Standard-Fächer, falls (noch) kein Untis-Stundenplan da ist */
 export function defaultSubjects() {
   return KNOWN.filter((k) => k.key !== 'nawi').map((k) => ({
@@ -63,7 +77,7 @@ export function defaultSubjects() {
     name: k.name,
     color: k.color,
     keywords: [],
-    hidden: ['latein', 'spanisch', 'informatik'].includes(k.key),
+    hidden: !COMMON.has(k.key),
   }));
 }
 
