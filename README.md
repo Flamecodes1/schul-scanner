@@ -21,8 +21,8 @@ ordentlich in deiner eigenen, privaten Ablage auf GitHub ab. Am PC siehst du all
 ## Wie es aufgebaut ist
 
 ```
-iPhone (Web-App)  ──►  privates Repo „schul-ablage“  ◄──  GitHub Action (in diesem Repo) holt Stundenplan aus WebUntis
-       ▲                         │
+iPhone (Web-App)  ──►  privates Repo „schul-ablage“  ◄──►  PC: holt Stundenplan aus WebUntis
+       ▲                         │                             und hält den Ablage-Ordner aktuell
        └──── PC (Browser) ◄──────┘
 ```
 
@@ -30,7 +30,7 @@ iPhone (Web-App)  ──►  privates Repo „schul-ablage“  ◄──  GitHub
 |---|---|---|
 | App | dieses Repo (GitHub Pages) | HTML/CSS/JS, keine Daten |
 | Ablage | privates Repo `schul-ablage` | PDFs, Texte, `index.json`, `config.json`, Stundenplan |
-| Untis-Sync | `.github/workflows/untis-sync.yml` in diesem Repo | läuft mehrmals täglich (kostenlos, weil öffentliches Repo), schreibt nur in die private Ablage |
+| Untis-Sync | `pc-sync/` auf deinem PC | Windows-Aufgabe, läuft morgens + alle 2 Std., schreibt nur in die private Ablage |
 
 Vorlage für die Ablage: [`ablage-vorlage/`](ablage-vorlage/)
 
@@ -39,13 +39,11 @@ Vorlage für die Ablage: [`ablage-vorlage/`](ablage-vorlage/)
 1. **Ablage-Repo** (privat) aus `ablage-vorlage/` anlegen.
 2. **Token für die App** erstellen: [Fine-grained Token](https://github.com/settings/personal-access-tokens/new)
    - *Repository access:* Only select repositories → `schul-ablage`
-   - *Permissions:* **Contents** = Read and write, **Actions** = Read and write
+   - *Permissions:* **Contents** = Read and write
 3. **App auf dem iPhone öffnen** (GitHub-Pages-Adresse) → in Safari **Teilen → Zum Home-Bildschirm**.
 4. In der App unter **Einstellungen** Repo-Name und Token eintragen.
-5. **Untis:** in **diesem** Repo unter *Settings → Secrets and variables → Actions* die Secrets
-   `UNTIS_URL`, `UNTIS_USER`, `UNTIS_PASSWORD` und `ABLAGE_TOKEN` anlegen
-   (Details in [`ablage-vorlage/README.md`](ablage-vorlage/README.md)). Dann in der App „Jetzt holen“ tippen.
-   Die Logs der Actions sind öffentlich, enthalten aber keine persönlichen Daten.
+5. **Untis:** am PC in `pc-sync/` die Datei **`Untis einrichten.cmd`** doppelklicken und den Anweisungen folgen
+   (braucht Node.js und Git mit Zugriff auf die Ablage). Details in [`ablage-vorlage/README.md`](ablage-vorlage/README.md).
 
 ## Entwickeln
 

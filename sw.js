@@ -1,5 +1,5 @@
 // Service Worker: App funktioniert auch offline, Bibliotheken werden zwischengespeichert.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL_CACHE = `shell-${VERSION}`;
 const CDN_CACHE = 'cdn-v1';
 const SHELL = [

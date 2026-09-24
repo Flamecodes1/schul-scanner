@@ -4,7 +4,6 @@ import { $, $$, esc, uid, isoDate, fmtDay, fmtLong, fmtMonth, fmtAgo, daysUntil,
 import {
   state, init, onChange, connected, updateSettings, refresh, syncOutbox, subjects, subjectById,
   allDocs, docById, addDoc, updateDoc, deleteDoc, thumbUrl, pdfBlob, search, saveSubjects,
-  triggerUntisSync, untisRunStatus, untisRepo,
 } from './library.js';
 import { GitHub } from './github.js';
 import { lessonAt, classify, suggestTitle, cleanTitle } from './classify.js';
@@ -316,7 +315,7 @@ function renderDoc(id) {
 // Einstellungen
 // ============================================================
 
-const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new?name=Schul-Scanner&description=Zugriff+der+Schul-Scanner-App+auf+die+Ablage&expires_in=365&contents=write&actions=write';
+const TOKEN_URL = 'https://github.com/settings/personal-access-tokens/new?name=Schul-Scanner&description=Zugriff+der+Schul-Scanner-App+auf+die+Ablage&expires_in=365&contents=write';
 
 function renderSettings() {
   const st = state.settings;
@@ -403,7 +402,7 @@ function renderGhSection() {
       <b>So verbindest du deine Ablage</b>
       <ol>
         <li><a href="${TOKEN_URL}" target="_blank" rel="noopener">Token auf GitHub erstellen</a>.<br>
-          <span class="small muted">Repository access: <i>Only select repositories</i> → dein Ablage-Repo. Permissions: <i>Contents</i> und <i>Actions</i> auf „Read and write“.</span></li>
+          <span class="small muted">Repository access: <i>Only select repositories</i> → dein Ablage-Repo. Permissions: <i>Contents</i> auf „Read and write“.</span></li>
         <li>Repo-Name und Token unten eintragen. Der Token bleibt nur auf diesem Gerät.</li>
       </ol>
     </div>
@@ -436,63 +435,39 @@ function renderGhSection() {
   };
 }
 
-const untisTokenUrl = () => `https://github.com/settings/personal-access-tokens/new?name=Untis-Sync&description=Stundenplan+in+die+Ablage+schreiben&expires_in=365&contents=write`;
-
+// Den Stundenplan holt dein PC (pc-sync/) – die App liest ihn nur aus der Ablage.
 function renderUntisSection() {
   const el = $('#untis-section');
   if (!el) return;
   const tt = state.timetable;
-  const repo = untisRepo();
+  const days = tt?.updated ? (Date.now() - new Date(tt.updated).getTime()) / 86400000 : 0;
+  const stale = days > 3;
   const info = tt
     ? `<div class="list">
-        <div class="row"><span class="dot" style="background:var(--ok)"></span><div class="grow"><div class="title">${esc(tt.school || 'Stundenplan geladen')}</div>
-        <div class="sub">Stand ${esc(fmtAgo(tt.updated))} · ${tt.subjects?.length || 0} Fächer · ${tt.lessons?.length || 0} Stunden</div></div></div>
-        <button class="row" type="button" id="untis-sync" ${connected() ? '' : 'disabled'}><span class="grow" style="color:var(--accent)">Jetzt aktualisieren</span><span class="val" id="untis-run"></span></button>
-      </div>`
+        <div class="row"><span class="dot" style="background:${stale ? 'var(--warn)' : 'var(--ok)'}"></span><div class="grow"><div class="title">${esc(tt.school || 'Stundenplan geladen')}</div>
+        <div class="sub">Stand ${esc(fmtAgo(tt.updated))} · ${tt.subjects?.length || 0} ${tt.subjects?.length === 1 ? 'Fach' : 'Fächer'}</div></div></div>
+        <button class="row" type="button" id="untis-reload"><span class="grow" style="color:var(--accent)">Neu laden</span></button>
+      </div>
+      <p class="small muted" style="margin:8px 4px 0">${stale
+        ? 'Dein PC war länger aus – schalt ihn mal an, dann holt er den neuesten Stundenplan.'
+        : 'Dein PC aktualisiert den Stundenplan automatisch, wenn er an ist.'}</p>`
     : `<div class="note">
         <b>Stundenplan automatisch aus WebUntis</b>
-        Ein kleiner Helfer auf GitHub holt deinen Stundenplan (inkl. Vertretungen, Hausaufgaben und Arbeiten) mehrmals am Tag – kostenlos über dein App-Repo, gespeichert wird aber nur in deiner privaten Ablage. Dafür trägst du einmal geheime „Secrets“ ein – sie landen nie in der App:
+        Dein PC holt den Stundenplan (inkl. Vertretungen, Hausaufgaben und Arbeiten), sobald er an ist, und legt ihn in deine Ablage. Einmal einrichten:
         <ol>
-          <li>${repo ? `<a href="https://github.com/${esc(repo)}/settings/secrets/actions/new" target="_blank" rel="noopener">Secrets im App-Repo <i>${esc(repo.split('/')[1])}</i> öffnen</a>` : 'Im App-Repo: Settings → Secrets and variables → Actions'}</li>
-          <li><code>UNTIS_URL</code> – die Adresse, wenn du WebUntis im Browser öffnest</li>
-          <li><code>UNTIS_USER</code> und <code>UNTIS_PASSWORD</code> – deine Untis-Anmeldung</li>
-          <li><code>ABLAGE_TOKEN</code> – ein <a href="${untisTokenUrl()}" target="_blank" rel="noopener">Token</a>, der in deine Ablage schreiben darf (nur <i>schul-ablage</i>, <i>Contents</i>: Read and write)</li>
-          <li>Dann hier auf „Jetzt holen“ tippen.</li>
+          <li>Am PC den Ordner <code>schul-scanner\\pc-sync</code> öffnen</li>
+          <li>Doppelklick auf <b>Untis einrichten.cmd</b></li>
+          <li>WebUntis-Adresse, Benutzername und Passwort eingeben – sie bleiben verschlüsselt auf deinem PC</li>
         </ol>
-        <button class="btn small primary" type="button" id="untis-sync" style="margin-top:10px" ${connected() ? '' : 'disabled'}>Jetzt holen</button>
-        <span class="small muted" id="untis-run"></span>
+        <button class="btn small" type="button" id="untis-reload" style="margin-top:10px" ${connected() ? '' : 'disabled'}>Neu laden</button>
       </div>`;
   if (el.dataset.html === info) return;
   el.dataset.html = info;
   el.innerHTML = info;
-  $('#untis-sync').onclick = async () => {
-    try {
-      await triggerUntisSync();
-      toast('Stundenplan wird geholt – dauert etwa eine Minute');
-      pollUntis();
-    } catch (err) {
-      toast(err.message, 7000);
-      if (err.noPermission) { await refresh(); }
-    }
+  $('#untis-reload').onclick = async () => {
+    await refresh();
+    toast(state.lastError || (state.timetable ? `Stundenplan: Stand ${fmtAgo(state.timetable.updated)}` : 'Noch kein Stundenplan in der Ablage'));
   };
-}
-
-async function pollUntis() {
-  const start = Date.now();
-  await new Promise((r) => setTimeout(r, 5000));
-  while (Date.now() - start < 4 * 60 * 1000) {
-    const run = await untisRunStatus();
-    const el = $('#untis-run');
-    if (run && new Date(run.created_at).getTime() > start - 30000) {
-      if (el) el.textContent = run.status === 'completed' ? (run.conclusion === 'success' ? 'fertig ✓' : 'fehlgeschlagen') : 'läuft…';
-      if (run.status === 'completed') {
-        if (run.conclusion === 'success') { await refresh(); toast('Stundenplan aktualisiert ✓'); }
-        else toast('Untis-Abruf fehlgeschlagen – stimmen die Secrets? Details auf GitHub unter „Actions“.', 6000);
-        return;
-      }
-    }
-    await new Promise((r) => setTimeout(r, 8000));
-  }
 }
 
 function renderSubjectEdit(id) {

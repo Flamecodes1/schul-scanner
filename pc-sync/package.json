@@ -1,0 +1,10 @@
+{
+  "name": "schul-scanner-pc-sync",
+  "private": true,
+  "type": "module",
+  "description": "Holt den Untis-Stundenplan auf dem PC und lädt ihn in die private Ablage.",
+  "dependencies": {
+    "otplib": "^12.0.1",
+    "webuntis": "2.2.1"
+  }
+}

@@ -1,8 +1,7 @@
 // Holt deinen Stundenplan aus WebUntis und speichert ihn als untis/timetable.json
-// (im aktuellen Ordner = ausgecheckte Ablage). Läuft auf GitHub Actions, siehe untis-sync.yml.
-// Die Logs sind öffentlich sichtbar – deshalb werden hier nie Namen, Schule oder Stunden ausgegeben.
+// im aktuellen Ordner (= deine Ablage). Wird von untis-sync.ps1 gestartet.
 //
-// Secrets (Settings → Secrets and variables → Actions):
+// Umgebungsvariablen (setzt untis-sync.ps1 aus deiner gespeicherten Einrichtung):
 //   UNTIS_URL       Adresse von WebUntis, z. B. https://xyz.webuntis.com/WebUntis/?school=abc
 //   UNTIS_USER      dein Benutzername
 //   UNTIS_PASSWORD  dein Passwort
@@ -107,17 +106,24 @@ function subjectKey(subjects, name) {
 
 // ---------- Anmelden ----------
 
-async function findSchool(query) {
+const SCHOOL_HINT = 'Kopier die Adresse am besten von der WebUntis-Anmeldeseite (vor dem Einloggen) – sie enthält „?school=…“.';
+
+async function searchSchools(query) {
   const res = await fetch('https://mobile.webuntis.com/ms/schoolquery2', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: '1', jsonrpc: '2.0', method: 'searchSchool', params: [{ search: query }] }),
   });
   const data = await res.json();
-  const schools = data?.result?.schools || [];
+  return data?.result?.schools || [];
+}
+
+async function findSchool(query, server = '') {
+  let schools = await searchSchools(query);
+  if (server) schools = schools.filter((s) => String(s.server).toLowerCase() === server.toLowerCase());
   if (schools.length === 1) return { server: schools[0].server, school: schools[0].loginName };
-  if (!schools.length) throw new Error('Keine Schule zu UNTIS_SCHOOL gefunden. Nimm besser UNTIS_URL (Adresse aus dem Browser mit „?school=…“).');
-  throw new Error(`${schools.length} Schulen passen zu UNTIS_SCHOOL. Nimm besser UNTIS_URL (Adresse aus dem Browser mit „?school=…“).`);
+  if (!schools.length) throw new Error(`Schule nicht gefunden. ${SCHOOL_HINT}`);
+  throw new Error(`${schools.length} Schulen passen. ${SCHOOL_HINT}`);
 }
 
 async function connect(env) {
@@ -126,7 +132,7 @@ async function connect(env) {
     const { authenticator } = await import('otplib');
     return { client: new WebUntisQR(env.UNTIS_QR.trim(), 'schul-scanner', authenticator, URL), school: new URL(env.UNTIS_QR.trim()).searchParams.get('school') };
   }
-  if (!env.UNTIS_USER || !env.UNTIS_PASSWORD) throw new Error('UNTIS_USER und UNTIS_PASSWORD fehlen (oder UNTIS_QR). Bitte als Secrets im Repo eintragen.');
+  if (!env.UNTIS_USER || !env.UNTIS_PASSWORD) throw new Error('Benutzername oder Passwort fehlen. Bitte "Untis einrichten.cmd" nochmal starten.');
   let server = '', school = '';
   if (env.UNTIS_URL) {
     const raw = env.UNTIS_URL.trim();
@@ -138,7 +144,9 @@ async function connect(env) {
     if (server && /^[\w.+-]+$/.test(env.UNTIS_SCHOOL.trim())) school = env.UNTIS_SCHOOL.trim();
     else ({ server, school } = await findSchool(env.UNTIS_SCHOOL.trim()));
   }
-  if (!server || !school) throw new Error('Schule unbekannt: UNTIS_URL mit „?school=…“ angeben oder zusätzlich UNTIS_SCHOOL setzen.');
+  // Neue Adressen sehen oft so aus: https://meine-schule.webuntis.com/today → Schule über den Servernamen suchen
+  if (!school && server) ({ server, school } = await findSchool(server.split('.')[0].replace(/-/g, ' '), server));
+  if (!server || !school) throw new Error(`Schule unbekannt. ${SCHOOL_HINT}`);
   return { client: new WebUntis(school, env.UNTIS_USER.trim(), env.UNTIS_PASSWORD, server, 'schul-scanner'), school };
 }
 
@@ -151,8 +159,8 @@ async function main() {
   try {
     await client.login();
   } catch (e) {
-    throw new Error(`Anmeldung bei WebUntis fehlgeschlagen (${e.message}). Stimmen UNTIS_URL, Benutzername und Passwort? `
-      + 'Falls du dich bei Untis über IServ/Microsoft/Schul-Login anmeldest, nimm stattdessen den QR-Code (Secret UNTIS_QR).');
+    throw new Error(`Anmeldung bei WebUntis fehlgeschlagen (${e.message}). Stimmen Adresse, Benutzername und Passwort? `
+      + 'Hinweis: Meldest du dich bei Untis über IServ/Microsoft an, klappt die Anmeldung mit Passwort evtl. nicht.');
   }
   console.log('Angemeldet ✓');
 
@@ -217,6 +225,7 @@ async function main() {
 
   const data = {
     version: 1,
+    source: 'pc',
     school,
     range: { from: fromIso, to: toIso },
     subjects,

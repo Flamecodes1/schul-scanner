@@ -130,17 +130,4 @@ export class GitHub {
       }
     }
   }
-
-  /** Startet einen Workflow (z. B. den Untis-Sync) */
-  dispatch(workflow) {
-    return this.json(`/repos/${this.repo}/actions/workflows/${workflow}/dispatches`, {
-      method: 'POST',
-      body: { ref: this.branch },
-    });
-  }
-
-  async latestRun(workflow) {
-    const res = await this.json(`/repos/${this.repo}/actions/workflows/${workflow}/runs?per_page=1`);
-    return res.workflow_runs?.[0] || null;
-  }
 }

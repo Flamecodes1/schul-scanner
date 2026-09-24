@@ -22,20 +22,14 @@ config.json                         ← deine Fächer
 
 ## Stundenplan aus Untis
 
-Der Stundenplan wird von einem Workflow im **App-Repo** (`schul-scanner`) geholt – dort sind GitHub Actions
-kostenlos – und direkt hierher nach `untis/timetable.json` geschrieben. Hier im privaten Repo läuft nichts.
+Den Stundenplan holt dein **PC**: Im App-Projekt liegt der Ordner `pc-sync` – dort einmal
+**`Untis einrichten.cmd`** doppelklicken und WebUntis-Adresse, Benutzername und Passwort eingeben.
 
-Die Secrets trägst du deshalb im App-Repo ein: **schul-scanner → Settings → Secrets and variables → Actions**
+Danach läuft eine Windows-Aufgabe morgens, alle 2 Stunden und beim Anmelden (verpasste Läufe werden nachgeholt).
+Sie holt den Stundenplan nach `untis/timetable.json` und aktualisiert dabei auch diesen Ordner auf dem PC –
+neue Scans vom Handy landen also automatisch hier.
 
-| Secret | Inhalt |
-|---|---|
-| `UNTIS_URL` | Die Adresse, wenn du WebUntis im Browser öffnest (z. B. `https://xyz.webuntis.com/WebUntis/?school=abc`) |
-| `UNTIS_USER` | Dein Untis-Benutzername |
-| `UNTIS_PASSWORD` | Dein Untis-Passwort |
-| `ABLAGE_TOKEN` | Ein Fine-grained Token nur für dieses Repo mit *Contents: Read and write* |
-
-Falls in der Adresse kein `?school=…` steht, zusätzlich `UNTIS_SCHOOL` anlegen.
-Meldest du dich bei Untis über IServ/Microsoft an, nimm statt Benutzer/Passwort das Secret `UNTIS_QR`
-(Inhalt des QR-Codes aus WebUntis → Profil → Freigaben).
-
-Secrets sind verschlüsselt: Niemand kann sie lesen – auch nicht in einem öffentlichen Repo.
+- Passwort: bleibt auf dem PC, verschlüsselt mit deinem Windows-Konto (`%APPDATA%\schul-scanner`)
+- Sofort abrufen: `Untis jetzt holen.cmd`
+- Protokoll: `%APPDATA%\schul-scanner\untis-sync.log`
+- Wieder entfernen: `Untis entfernen.cmd`
