@@ -1,0 +1,4 @@
+node_modules/
+.obsidian/workspace*.json
+.DS_Store
+Thumbs.db

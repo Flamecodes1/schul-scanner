@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Schul-Scanner</title>
+  <meta name="description" content="Arbeitsblätter scannen, automatisch nach Fach sortieren und überall finden.">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Scanner">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <main id="view" aria-live="polite"></main>
+
+    <nav class="tabbar" aria-label="Navigation">
+      <a href="#/" data-tab="library" class="tab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h3A1.5 1.5 0 0 1 10 5.5v13A1.5 1.5 0 0 1 8.5 20h-3A1.5 1.5 0 0 1 4 18.5zm7 0A1.5 1.5 0 0 1 12.5 4h1A1.5 1.5 0 0 1 15 5.5v13a1.5 1.5 0 0 1-1.5 1.5h-1a1.5 1.5 0 0 1-1.5-1.5zm5.2.9a1.5 1.5 0 0 1 1.9-1l.9.3a1.5 1.5 0 0 1 1 1.9l-3.9 12.4a1.5 1.5 0 0 1-1.9 1l-.2-.1z"/></svg>
+        <span>Bibliothek</span>
+      </a>
+      <button type="button" id="scan-button" class="scan-fab" aria-label="Neues Blatt scannen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <a href="#/einstellungen" data-tab="settings" class="tab">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7m8.4 5.2-1.6-.9a7 7 0 0 0 0-1.6l1.6-.9a.8.8 0 0 0 .3-1.1l-1.5-2.6a.8.8 0 0 0-1.1-.3l-1.6.9a7 7 0 0 0-1.4-.8V4.6a.8.8 0 0 0-.8-.8h-3a.8.8 0 0 0-.8.8v1.8a7 7 0 0 0-1.4.8l-1.6-.9a.8.8 0 0 0-1.1.3L3.3 9.2a.8.8 0 0 0 .3 1.1l1.6.9a7 7 0 0 0 0 1.6l-1.6.9a.8.8 0 0 0-.3 1.1l1.5 2.6a.8.8 0 0 0 1.1.3l1.6-.9a7 7 0 0 0 1.4.8v1.8a.8.8 0 0 0 .8.8h3a.8.8 0 0 0 .8-.8v-1.8a7 7 0 0 0 1.4-.8l1.6.9a.8.8 0 0 0 1.1-.3l1.5-2.6a.8.8 0 0 0-.3-1.1"/></svg>
+        <span>Einstellungen</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- Scan-Ablauf als Vollbild-Sheet -->
+  <section id="scan" class="sheet" hidden aria-label="Scannen"></section>
+
+  <input type="file" id="pick-camera" accept="image/*" capture="environment" hidden>
+  <input type="file" id="pick-photos" accept="image/*" multiple hidden>
+  <input type="file" id="pick-files" accept="image/*,application/pdf" multiple hidden>
+
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>
